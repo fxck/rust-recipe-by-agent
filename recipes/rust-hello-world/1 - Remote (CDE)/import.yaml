@@ -1,0 +1,35 @@
+project:
+  name: rust-hello-world-remote-cde
+
+services:
+  # Deploy PostgreSQL database for app data.
+  # Priority 10 ensures database starts before app — pattern explained at 'db' service in Env 0.
+  - hostname: db
+    type: postgresql@17
+    mode: NON_HA
+    priority: 10
+
+  # Development container for human developers via SSH/IDE mounting.
+  # Developers SSH in, mount filesystem to local IDE (VSCode Remote, etc.),
+  # modify code locally while running in cloud environment. Full Rust toolchain included.
+  - hostname: appdev
+    type: rust@stable
+    zeropsSetup: dev
+    buildFromGit: https://github.com/zerops-recipe-apps/rust-hello-world-app
+    enableSubdomainAccess: true
+    verticalAutoscaling:
+      # Suggest 4GB for comfortable development with IDE, cargo, and rustc.
+      # Rust compilation is memory-intensive — 0.5GB may cause OOM during large builds.
+      # Uncomment below for production-like development experience:
+      # minRam: 4
+      minRam: 0.5
+
+  # Staging container for testing production builds before deploying to prod.
+  # Developers push via 'zcli push' to verify release builds and deployment pipeline.
+  - hostname: appstage
+    type: rust@stable
+    zeropsSetup: prod
+    buildFromGit: https://github.com/zerops-recipe-apps/rust-hello-world-app
+    enableSubdomainAccess: true
+    verticalAutoscaling:
+      minRam: 0.5

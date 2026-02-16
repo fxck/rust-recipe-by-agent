@@ -1,0 +1,26 @@
+project:
+  name: rust-hello-world-local
+
+services:
+  # Deploy PostgreSQL database for local development.
+  # Priority 10 ensures database starts first — pattern explained in Env 0.
+  # Local developers connect via 'zcli vpn up' to access this database securely.
+  - hostname: db
+    type: postgresql@17
+    mode: NON_HA
+    priority: 10
+
+  # Deploy staging app to validate deployment pipeline works correctly.
+  # In local development, developers run app on their machine (cargo run locally),
+  # but still need to verify that 'zcli push' and production builds work.
+  # This service exists solely for testing the build/deploy process.
+  - hostname: app
+    type: rust@stable
+    zeropsSetup: prod
+    buildFromGit: https://github.com/zerops-recipe-apps/rust-hello-world-app
+    enableSubdomainAccess: true
+    verticalAutoscaling:
+      minRam: 0.25
+      # Reserve 40% RAM for GC and request spikes.
+      # Rust has efficient memory management but still needs headroom for traffic bursts.
+      minFreeRamGB: 0.1

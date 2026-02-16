@@ -1,0 +1,38 @@
+project:
+  # Serious core provides enhanced infrastructure reliability and performance.
+  # Includes dedicated hardware resources, priority support response, and improved SLAs.
+  # Docs: https://docs.zerops.io/features/infrastructure#project-core-options
+  name: rust-hello-world-highly-available-production
+  corePackage: SERIOUS
+
+services:
+  # Deploy PostgreSQL database in high-availability mode.
+  # HA mode runs 2 database containers with automatic failover and replication.
+  # If primary fails, secondary promotes to primary within seconds (zero data loss).
+  # Priority 10 ensures database starts before app — pattern explained in Env 0.
+  - hostname: db
+    type: postgresql@17
+    mode: HA
+    priority: 10
+    verticalAutoscaling:
+      # Dedicated CPU cores eliminate noisy neighbor issues and ensure consistent performance.
+      # Database queries complete in predictable time regardless of other tenants' workloads.
+      cpuMode: DEDICATED
+      minRam: 1
+
+  # Deploy highly-available production app with dedicated resources.
+  # Runs 2 containers minimum, scales horizontally under load, uses dedicated CPUs
+  # for consistent sub-millisecond response times.
+  - hostname: app
+    type: rust@stable
+    zeropsSetup: prod
+    buildFromGit: https://github.com/zerops-recipe-apps/rust-hello-world-app
+    minContainers: 2
+    enableSubdomainAccess: true
+    verticalAutoscaling:
+      # Dedicated CPUs provide consistent performance — no CPU throttling or resource contention
+      cpuMode: DEDICATED
+      minRam: 0.5
+      # Reserve 50% RAM for traffic spikes and memory bursts.
+      # Higher headroom than Env 4 because HA workloads need extra buffer for failover scenarios.
+      minFreeRamGB: 0.25
