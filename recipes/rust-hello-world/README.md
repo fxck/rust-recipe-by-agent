@@ -1,8 +1,7 @@
 # Rust Hello World Recipe
 
 <!-- #ZEROPS_EXTRACT_START:intro# -->
-Basic example of running [Rust](https://www.rust-lang.org/) applications on [Zerops](https://zerops.io).
-Simple Rust API with single endpoint that reads from and writes to a PostgreSQL database.
+Actix Web application with a health check endpoint that verifies PostgreSQL connectivity using `tokio-postgres` and returns JSON service status. Demonstrates the full Zerops build pipeline for Rust: compiling a release binary with `cargo build --release --locked`, deploying the minimal artifact to an Ubuntu runtime, and using `CARGO_HOME` to keep the Cargo registry inside the project directory for efficient caching.
 <!-- #ZEROPS_EXTRACT_END:intro# -->
 
 **Full recipe page and deploy with one-click**

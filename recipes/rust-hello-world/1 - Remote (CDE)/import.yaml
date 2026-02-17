@@ -2,34 +2,38 @@ project:
   name: rust-hello-world-remote-cde
 
 services:
-  # Deploy PostgreSQL database for app data.
-  # Priority 10 ensures database starts before app — pattern explained at 'db' service in Env 0.
-  - hostname: db
-    type: postgresql@17
-    mode: NON_HA
-    priority: 10
-
-  # Development container for human developers via SSH/IDE mounting.
-  # Developers SSH in, mount filesystem to local IDE (VSCode Remote, etc.),
-  # modify code locally while running in cloud environment. Full Rust toolchain included.
+  # Development container for human developers working remotely via SSH or IDE.
+  # Developers connect directly to this container — no local Rust toolchain required.
+  # The 'dev' setup deploys the full source tree and Cargo registry, so 'cargo run'
+  # works immediately after SSHing in. Mount this container in VS Code Remote SSH
+  # or JetBrains Gateway for a full IDE experience inside the Zerops environment.
   - hostname: appdev
     type: rust@stable
     zeropsSetup: dev
     buildFromGit: https://github.com/zerops-recipe-apps/rust-hello-world-app
     enableSubdomainAccess: true
+    minContainers: 1
     verticalAutoscaling:
-      # Suggest 4GB for comfortable development with IDE, cargo, and rustc.
-      # Rust compilation is memory-intensive — 0.5GB may cause OOM during large builds.
-      # Uncomment below for production-like development experience:
-      # minRam: 4
       minRam: 0.5
+      # Uncomment for a more comfortable experience during heavy compilation:
+      # minRam: 4
 
-  # Staging container for testing production builds before deploying to prod.
-  # Developers push via 'zcli push' to verify release builds and deployment pipeline.
+  # Staging container for validating the production build pipeline.
+  # Developer runs 'zcli push <appstage-id> --setup=prod' from appdev to confirm
+  # the release binary builds cleanly before deploying to production.
   - hostname: appstage
     type: rust@stable
     zeropsSetup: prod
     buildFromGit: https://github.com/zerops-recipe-apps/rust-hello-world-app
     enableSubdomainAccess: true
-    verticalAutoscaling:
-      minRam: 0.5
+    minContainers: 1
+
+  # Deploy PostgreSQL database for app data.
+  # Priority 10 ensures the database starts before app containers — without this,
+  # both appdev and appstage would attempt to connect before the database is ready
+  # and fail with "connection refused". This startup ordering pattern applies to
+  # all data services in this project.
+  - hostname: db
+    type: postgresql@17
+    mode: NON_HA
+    priority: 10

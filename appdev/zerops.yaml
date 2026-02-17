@@ -1,20 +1,3 @@
-# Rust Hello World Recipe App
-Actix Web application serving a health check endpoint at `/` that tests PostgreSQL connectivity using `tokio-postgres` and returns JSON service status with HTTP 200/503. Used within [Rust Hello World recipe](https://app.zerops.io/recipes/rust-hello-world) for [Zerops](https://zerops.io) platform.
-
-**Full recipe page and deploy with one-click**
-
-[![Deploy on Zerops](https://github.com/zeropsio/recipe-shared-assets/blob/main/deploy-button/light/deploy-button.svg)](https://app.zerops.io/recipes/rust-hello-world?environment=small-production)
-
-![Rust cover](https://github.com/zeropsio/recipe-shared-assets/blob/main/covers/svg/cover-rust.svg)
-
-## Integration Guide
-
-<!-- #ZEROPS_EXTRACT_START:integration-guide# -->
-
-### 1. Adding `zerops.yaml`
-The main application configuration file you place at the root of your repository, it tells Zerops how to build, deploy and run your application.
-
-```yaml
 # Two setups cover the full development lifecycle:
 # 'prod' compiles an optimized release binary and deploys only the artifact.
 # 'dev' deploys the full source tree so a developer can SSH in and run
@@ -136,6 +119,3 @@ zerops:
       # SSH in and run: cargo run
       # The Cargo registry is already at /var/www/.cargo — no internet required.
       start: zsc noop --silent
-```
-
-<!-- #ZEROPS_EXTRACT_END:integration-guide# -->

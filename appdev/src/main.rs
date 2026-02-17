@@ -1,61 +1,17 @@
 use actix_web::{web, App, HttpResponse, HttpServer};
-use serde::Serialize;
+use serde_json::json;
 use std::env;
 use tokio_postgres::NoTls;
 
-#[derive(Serialize)]
-struct HealthResponse {
-    r#type: String,
-    status: HealthStatus,
-}
-
-#[derive(Serialize)]
-struct HealthStatus {
-    database: String,
-}
-
+/// Health check handler: connects to PostgreSQL and reports status.
+/// Returns HTTP 200 with {"type":"rust","status":{"database":"OK"}} on success,
+/// or HTTP 503 with error details if the database is unreachable.
 async fn health_check() -> HttpResponse {
-    let db_status = check_database().await;
-
-    let response = HealthResponse {
-        r#type: "rust".to_string(),
-        status: HealthStatus {
-            database: db_status.clone(),
-        },
-    };
-
-    if db_status == "OK" {
-        HttpResponse::Ok().json(response)
-    } else {
-        HttpResponse::ServiceUnavailable().json(response)
-    }
-}
-
-async fn check_database() -> String {
-    let db_host = match env::var("DB_HOST") {
-        Ok(val) => val,
-        Err(_) => return "ERROR: DB_HOST not set".to_string(),
-    };
-
-    let db_port = match env::var("DB_PORT") {
-        Ok(val) => val,
-        Err(_) => return "ERROR: DB_PORT not set".to_string(),
-    };
-
-    let db_user = match env::var("DB_USER") {
-        Ok(val) => val,
-        Err(_) => return "ERROR: DB_USER not set".to_string(),
-    };
-
-    let db_pass = match env::var("DB_PASS") {
-        Ok(val) => val,
-        Err(_) => return "ERROR: DB_PASS not set".to_string(),
-    };
-
-    let db_name = match env::var("DB_NAME") {
-        Ok(val) => val,
-        Err(_) => return "ERROR: DB_NAME not set".to_string(),
-    };
+    let db_host = env::var("DB_HOST").unwrap_or_else(|_| "localhost".to_string());
+    let db_port = env::var("DB_PORT").unwrap_or_else(|_| "5432".to_string());
+    let db_user = env::var("DB_USER").unwrap_or_else(|_| "postgres".to_string());
+    let db_pass = env::var("DB_PASS").unwrap_or_else(|_| "".to_string());
+    let db_name = env::var("DB_NAME").unwrap_or_else(|_| "db".to_string());
 
     let conn_str = format!(
         "host={} port={} user={} password={} dbname={}",
@@ -64,30 +20,46 @@ async fn check_database() -> String {
 
     match tokio_postgres::connect(&conn_str, NoTls).await {
         Ok((client, connection)) => {
+            // Drive the connection in the background
             tokio::spawn(async move {
                 if let Err(e) = connection.await {
-                    eprintln!("Database connection error: {}", e);
+                    eprintln!("PostgreSQL connection error: {}", e);
                 }
             });
 
-            match client.simple_query("SELECT 1").await {
-                Ok(_) => "OK".to_string(),
-                Err(e) => format!("ERROR: Query failed: {}", e),
+            // Ping with a lightweight query to confirm the connection is live
+            match client.execute("SELECT 1", &[]).await {
+                Ok(_) => HttpResponse::Ok().json(json!({
+                    "type": "rust",
+                    "status": {
+                        "database": "OK"
+                    }
+                })),
+                Err(e) => HttpResponse::ServiceUnavailable().json(json!({
+                    "type": "rust",
+                    "status": {
+                        "database": format!("ERROR: {}", e)
+                    }
+                })),
             }
         }
-        Err(e) => format!("ERROR: Connection failed: {}", e),
+        Err(e) => HttpResponse::ServiceUnavailable().json(json!({
+            "type": "rust",
+            "status": {
+                "database": format!("ERROR: {}", e)
+            }
+        })),
     }
 }
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    println!("Starting Rust server on port 3000");
+    println!("Starting Rust hello world server on 0.0.0.0:8080");
 
     HttpServer::new(|| {
-        App::new()
-            .route("/", web::get().to(health_check))
+        App::new().route("/", web::get().to(health_check))
     })
-    .bind("[::]:3000")?
+    .bind("[::]:8080")?
     .run()
     .await
 }

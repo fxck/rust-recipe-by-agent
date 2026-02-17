@@ -2,24 +2,27 @@ project:
   name: rust-hello-world-small-production
 
 services:
-  # Deploy PostgreSQL database for production data.
-  # Priority 10 ensures database starts before app — pattern explained in Env 0.
-  - hostname: db
-    type: postgresql@17
-    mode: NON_HA
-    priority: 10
-
-  # Deploy production app optimized for moderate throughput.
-  # Runs 2 containers minimum for high availability — if one fails, traffic routes to other.
-  # Auto-scales horizontally based on load (CPU/RAM thresholds).
+  # Production app with horizontal scaling for moderate traffic.
+  # minContainers: 2 ensures two containers are always running — zero-downtime deployments
+  # work by starting new containers before removing old ones from the project balancer,
+  # and two containers give the balancer failover capacity during that transition.
   - hostname: app
     type: rust@stable
     zeropsSetup: prod
     buildFromGit: https://github.com/zerops-recipe-apps/rust-hello-world-app
-    minContainers: 2
     enableSubdomainAccess: true
+    minContainers: 2
     verticalAutoscaling:
-      minRam: 0.25
-      # Reserve 40% RAM for traffic spikes and memory bursts.
-      # Rust's efficient memory management reduces GC pressure but headroom still critical.
-      minFreeRamGB: 0.1
+      minRam: 0.125
+      # Rust has no GC, so memory usage is predictable. Reserve ~40% as headroom
+      # for the async Tokio runtime and concurrent connections under traffic spikes.
+      minFreeRamGB: 0.05
+
+  # Deploy PostgreSQL database for app data.
+  # Priority 10 ensures the database starts before app containers — without this,
+  # the app would fail with "connection refused" during deployment.
+  # This startup ordering pattern applies to all data services in this project.
+  - hostname: db
+    type: postgresql@17
+    mode: NON_HA
+    priority: 10
