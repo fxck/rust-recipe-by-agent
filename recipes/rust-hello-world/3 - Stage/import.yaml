@@ -2,25 +2,24 @@ project:
   name: rust-hello-world-stage
 
 services:
-  # Pre-production staging app using the same 'prod' build pipeline as production.
-  # Receives deployments from the Git repository for final validation before going live.
-  # Single container with minimal resources mirrors the production build without the cost
-  # of horizontal scaling — sufficient for functional and integration testing.
+  # Staging app: runs the same production build pipeline as production
+  # (release binary compiled from source, readiness check before traffic).
+  # Single container at minimal resources — staging exists to catch build
+  # and integration issues before they reach production, not to handle load.
   - hostname: app
     type: rust@stable
     zeropsSetup: prod
     buildFromGit: https://github.com/zerops-recipe-apps/rust-hello-world-app
     enableSubdomainAccess: true
     minContainers: 1
-    verticalAutoscaling:
+    maxContainers: 1
+    resources:
       minRam: 0.125
-      # Reserve ~40% RAM as headroom for the async Tokio runtime under test load.
       minFreeRamGB: 0.05
 
   # Deploy PostgreSQL database for app data.
-  # Priority 10 ensures the database starts before the app container — without this,
-  # the app would fail with "connection refused" during deployment.
-  # This startup ordering pattern applies to all data services in this project.
+  # Priority 10 ensures the database starts before the app container,
+  # preventing connection errors during deployment.
   - hostname: db
     type: postgresql@17
     mode: NON_HA

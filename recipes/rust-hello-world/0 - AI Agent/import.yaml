@@ -2,35 +2,40 @@ project:
   name: rust-hello-world-ai-agent
 
 services:
-  # Development container where an AI agent (Claude Code, opencode, etc.) writes and
-  # iterates on application code. The agent SSHs in, edits source files, runs 'cargo run'
-  # to test locally, and uses 'zcli push' to deploy builds to appstage for pipeline validation.
+  # Development container for the AI agent to write and test code via SSH.
+  # Receives 'dev' setup deployments: full source code + pre-fetched crate
+  # registry, ready for 'cargo run' without any additional setup.
+  # The subdomain gives the agent an HTTP endpoint to verify changes quickly.
   - hostname: appdev
     type: rust@stable
     zeropsSetup: dev
     buildFromGit: https://github.com/zerops-recipe-apps/rust-hello-world-app
     enableSubdomainAccess: true
     minContainers: 1
-    verticalAutoscaling:
-      # 0.5 GB floor gives cargo enough RAM for initial compilation — the first
-      # 'cargo run' compiles the full dependency tree and spikes memory noticeably.
+    maxContainers: 1
+    resources:
       minRam: 0.5
+      minVCpu: 1
 
-  # Staging container for validating the production build pipeline.
-  # After iterating in appdev, the agent runs 'zcli push <appstage-id> --setup=prod'
-  # to confirm the release binary builds, deploys, and passes the readiness check.
+  # Staging container for the AI agent to validate the production build
+  # pipeline: push source → build container compiles the release binary →
+  # binary deploys here → readiness check confirms the app is healthy.
+  # Mirrors what a real production deploy does, at minimal resource cost.
   - hostname: appstage
     type: rust@stable
     zeropsSetup: prod
     buildFromGit: https://github.com/zerops-recipe-apps/rust-hello-world-app
     enableSubdomainAccess: true
     minContainers: 1
+    maxContainers: 1
+    resources:
+      minRam: 0.125
+      minFreeRamGB: 0.05
 
   # Deploy PostgreSQL database for app data.
-  # Priority 10 ensures the database starts before app containers — without this,
-  # both appdev and appstage would attempt to connect before the database is ready
-  # and fail with "connection refused". This startup ordering pattern applies to
-  # all data services in this project.
+  # Priority 10 ensures the database starts before app containers, preventing
+  # connection errors during deployment. This startup ordering pattern applies
+  # to all data services in this project.
   - hostname: db
     type: postgresql@17
     mode: NON_HA

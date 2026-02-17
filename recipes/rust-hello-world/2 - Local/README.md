@@ -1,6 +1,6 @@
 # Rust Hello World - Local
-This is a local development environment for [Rust Hello World (info + deploy)](https://app.zerops.io/recipes/rust-hello-world?environment=local) recipe on [Zerops](https://zerops.io).
+This is the local development environment for [Rust Hello World (info + deploy)](https://app.zerops.io/recipes/rust-hello-world?environment=local) recipe on [Zerops](https://zerops.io).
 
 <!-- #ZEROPS_EXTRACT_START:intro# -->
-Local development setup — run Rust locally while connecting to a cloud PostgreSQL database. Use `zcli vpn up` to join the Zerops project network; your local `cargo run` can then reach the `db` service by hostname as if running inside the project. Deploy to the `app` container via `zcli push` to validate the production build pipeline.
+Cloud database with local app: a PostgreSQL service runs on Zerops while your Rust application runs on your own machine. Use `zcli vpn up` to open a secure tunnel into the Zerops network so your local `cargo run` can connect to the cloud database by hostname. Push to Zerops via `zcli push` when you want to test the production build pipeline.
 <!-- #ZEROPS_EXTRACT_END:intro# -->

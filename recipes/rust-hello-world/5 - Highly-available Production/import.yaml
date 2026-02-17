@@ -1,36 +1,46 @@
 project:
   name: rust-hello-world-highly-available-production
-  # SERIOUS core: dedicated project infrastructure with isolated routing and enhanced
-  # performance. The default Lightweight core is shared across projects; SERIOUS provides
-  # dedicated balancer capacity for consistent latency at scale.
+  # Serious core: dedicated physical cores reserved for this project.
+  # Eliminates noisy-neighbour CPU contention at the hypervisor level.
+  # Required for predictable latency on high-traffic production workloads.
+  # Docs: https://docs.zerops.io/features/infrastructure#project-core-options
   corePackage: SERIOUS
 
 services:
-  # HA production app with dedicated CPU and aggressive scaling floor.
-  # cpuMode: DEDICATED eliminates scheduler contention — Rust's zero-cost abstractions
-  # and async I/O deliver maximum throughput when the CPU is not shared with other workloads.
-  # minContainers: 2 ensures zero-downtime deployments and load balancer failover capacity.
+  # HA production app: dedicated CPU cores for consistent low latency.
+  # Rust's predictable, allocation-free runtime makes it an excellent fit
+  # for dedicated CPU environments — no GC pauses, no JIT warmup, no
+  # unpredictable memory growth between requests.
+  # Two minimum containers ensure zero-downtime deploys; autoscaling adds
+  # more as traffic grows.
   - hostname: app
     type: rust@stable
     zeropsSetup: prod
     buildFromGit: https://github.com/zerops-recipe-apps/rust-hello-world-app
     enableSubdomainAccess: true
     minContainers: 2
-    verticalAutoscaling:
-      minRam: 0.25
-      # Reserve ~40% RAM for the async runtime, OS page cache, and request bursts.
-      minFreeRamGB: 0.1
-      cpuMode: DEDICATED
+    maxContainers: 10
+    # DEDICATED mode pins vCPUs to this container — no sharing with other
+    # tenants. Enables consistent sub-millisecond response times under load.
+    cpuMode: DEDICATED
+    resources:
+      minRam: 0.5
+      # Reserve ~30% as free RAM. Even without GC, Rust allocators hold
+      # memory pages between requests; headroom prevents OOM kills at peak.
+      minFreeRamGB: 0.25
+      minVCpu: 2
 
-  # Deploy PostgreSQL database with HA mode for production durability.
-  # HA mode runs two database containers with synchronous replication — if one fails,
-  # the other takes over without data loss or manual intervention.
-  # Priority 10 ensures the database starts before app containers (startup ordering
-  # pattern explained at 'app' service above — applies to all data services).
+  # HA PostgreSQL: primary + replica with automatic failover.
+  # If the primary fails, Zerops promotes the replica and updates the
+  # db_hostname connection variable automatically — no DNS changes needed.
+  # Dedicated CPU prevents database latency spikes from competing workloads.
+  # Priority 10 ensures the database cluster is healthy before app containers
+  # start, preventing connection errors during initial deployment.
   - hostname: db
     type: postgresql@17
     mode: HA
     priority: 10
-    verticalAutoscaling:
-      cpuMode: DEDICATED
+    cpuMode: DEDICATED
+    resources:
       minRam: 1
+      minVCpu: 2

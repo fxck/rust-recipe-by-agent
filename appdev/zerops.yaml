@@ -1,121 +1,115 @@
-# Two setups cover the full development lifecycle:
-# 'prod' compiles an optimized release binary and deploys only the artifact.
-# 'dev' deploys the full source tree so a developer can SSH in and run
-# 'cargo run' without needing a local Rust toolchain.
 zerops:
+  # Production setup: Compile a release binary and deploy only that artifact.
+  # The binary is self-contained — no runtime dependencies beyond the OS libc —
+  # so the deployed footprint is a single file.
+  # Contrast with the 'dev' setup below, which deploys full source code so a
+  # developer can edit and run the app directly via SSH.
   - setup: prod
     build:
-      # rust@stable gives the full Rust toolchain (rustc + cargo) in the build container.
-      # The build container is temporary — it compiles the binary and is deleted afterward;
-      # only the compiled artifact is kept and deployed to runtime containers.
       base: rust@stable
 
+      # build.envVariables are injected into every build command in this
+      # setup — prepareCommands, buildCommands, and cache steps all see them.
+      # CARGO_HOME is redirected into the project directory (./.cargo) so the
+      # cache section below can persist the downloaded crate registry between
+      # builds. The default location (~/.cargo) is outside the project tree
+      # and therefore outside the reach of Zerops build caching.
       envVariables:
-        # Redirect Cargo's home directory into the project dir (.cargo/) so that
-        # both cache: and deployFiles: can reference it — ~/.cargo is outside
-        # /build/source and inaccessible to both by default.
-        CARGO_HOME: .cargo
+        CARGO_HOME: ./.cargo
 
       buildCommands:
-        # --release enables optimizations (inlining, dead-code elimination, LTO).
-        # --locked enforces Cargo.lock reproducibility — fails if lock file is out of sync,
-        # which is correct for production: deterministic builds, no surprise dependency upgrades.
+        # --release: Enable full compiler optimisations (LTO, inlining) for
+        # a production binary. Compile time is higher but runtime performance
+        # and binary size are optimal.
+        # --locked: Require that Cargo.lock matches Cargo.toml exactly.
+        # Cargo.lock is committed to version control, so every build resolves
+        # to the same dependency versions — no silent upgrades between deploys.
         - cargo build --release --locked
 
-      # Deploy only the compiled binary — runtime containers don't need source code,
-      # the Cargo registry, or the toolchain. Minimal artifact = smaller deploy, faster startup.
       deployFiles:
+        # Deploy only the compiled binary. Path must match the start command
+        # exactly: the binary lands at /var/www/target/release/rust-hello-world
+        # in the runtime container.
         - ./target/release/rust-hello-world
 
-      # Cache the Cargo registry and compiled intermediates between builds.
-      # First build: Cargo downloads and compiles all crates from scratch (~minutes).
-      # Subsequent builds: registry restored from cache, only changed code recompiles (~seconds).
+      # Cache the crate registry so subsequent builds skip re-downloading
+      # crates from crates.io. Must match the CARGO_HOME path set above.
       cache:
-        - .cargo
-        - target
+        - .cargo/registry
 
-    # readinessCheck runs during each deployment BEFORE the project balancer routes
-    # traffic to the new container. Zerops waits for HTTP 200 on this endpoint —
-    # guaranteeing the app is up and the database connection is live before serving users.
+    # Readiness check: Zerops calls GET / on the new runtime container
+    # during deployment. The project balancer withholds traffic until this
+    # returns HTTP 200, giving the app time to connect to PostgreSQL and
+    # confirm it is healthy before receiving real requests.
+    # Docs: https://docs.zerops.io/zerops-yaml/specification#readinesscheck-
     deploy:
       readinessCheck:
         httpGet:
-          port: 8080
+          port: 3000
           path: /
 
     run:
-      # ubuntu@22.04 provides the glibc runtime that dynamically-linked Rust binaries require.
-      # The binary compiled with rust@stable links against glibc by default.
-      base: ubuntu@22.04
-
+      base: rust@stable
       ports:
-        - port: 8080
+        - port: 3000
           httpSupport: true
-
-      # Rust has no garbage collector, so memory usage is predictable and low.
-      # Reserve ~30% of minRam as free headroom for async runtime overhead
-      # and traffic spikes — sufficient without OOM risk.
-      verticalAutoscaling:
-        minRam: 0.125
-        minFreeRamGB: 0.05
-
       envVariables:
-        # Zerops injects service credentials using the pattern {hostname}_{key}.
-        # Since the database service is named 'db', the available variables are
-        # db_hostname, db_port, db_user, db_password, and db_dbName.
+        # DB_* variables reference the 'db' service using the
+        # {hostname}_{key} pattern. When the import.yaml hostname is 'db',
+        # Zerops injects db_hostname, db_port, db_user, db_password, etc.
+        # Docs: https://docs.zerops.io/features/env-variables#referencing-variables
+        DB_NAME: db
         DB_HOST: ${db_hostname}
         DB_PORT: ${db_port}
         DB_USER: ${db_user}
         DB_PASS: ${db_password}
-        DB_NAME: db
-
-      # Path matches deployFiles exactly — binary deployed at ./target/release/rust-hello-world
-      # lands at /var/www/target/release/rust-hello-world in the runtime container.
       start: ./target/release/rust-hello-world
 
+  # Development setup: Deploy full source code and a pre-fetched dependency
+  # cache so a developer can SSH in and run 'cargo run' immediately.
+  # The build container downloads crates; the runtime container holds the
+  # working directory ready for interactive development.
   - setup: dev
     build:
       base: rust@stable
 
+      # Redirect CARGO_HOME into the project tree for Zerops build caching.
+      # Pattern explained at 'prod' setup above.
       envVariables:
-        # Same CARGO_HOME redirect as prod — keeps registry in project dir for caching.
-        CARGO_HOME: .cargo
+        CARGO_HOME: ./.cargo
 
       buildCommands:
-        # Pre-fetch all crate dependencies without compiling.
-        # The developer will run 'cargo run' themselves after SSHing in.
-        # Skipping cargo build is intentional — the developer will edit code immediately,
-        # making any pre-compiled output stale. Fetching only saves the download step.
+        # Download all crates declared in Cargo.toml into the local registry.
+        # 'cargo fetch' does not compile — that is left to the developer via SSH.
+        # Using 'cargo fetch' (not 'cargo build') avoids a full compilation
+        # that would be discarded the moment the developer edits source code.
         - cargo fetch
 
-      # Deploy the full source tree including .cargo/ (the fetched registry).
-      # The developer runs 'cargo run' in the runtime container — cargo finds the
-      # registry in /var/www/.cargo (set via CARGO_HOME below) and compiles locally.
-      deployFiles:
-        - ./
+      # Deploy the entire working directory: source code + downloaded crates.
+      # The developer gets a fully prepared workspace via SSH.
+      deployFiles: ./
 
+      # Cache the crate registry between dev deploys so 'cargo fetch' only
+      # downloads new or updated crates.
       cache:
-        - .cargo  # Subsequent dev pushes skip crate downloads
-        - target  # Cached compiled output speeds up cargo run after first build
+        - .cargo/registry
 
     run:
+      # rust@stable provides the full Rust toolchain (cargo, rustc) for
+      # interactive development. The Zerops rust@stable image is Ubuntu-based
+      # (add 'os: alpine' in zerops.yaml if you want an Alpine runtime).
+      # This gives developers cargo run support via SSH immediately.
       base: rust@stable
-
       ports:
-        - port: 8080
+        - port: 3000
           httpSupport: true
-
       envVariables:
+        DB_NAME: db
         DB_HOST: ${db_hostname}
         DB_PORT: ${db_port}
         DB_USER: ${db_user}
         DB_PASS: ${db_password}
-        DB_NAME: db
-        # Tell cargo in the runtime container where the deployed registry lives.
-        # Without this, cargo looks in ~/.cargo/ and re-downloads everything on first run.
-        CARGO_HOME: /var/www/.cargo
-
-      # Dev is developer-driven: Zerops prepares the workspace and stays idle.
-      # SSH in and run: cargo run
-      # The Cargo registry is already at /var/www/.cargo — no internet required.
+      # zsc noop keeps the container alive without starting the app.
+      # The developer starts the server manually via SSH: 'cargo run'
+      # or 'CARGO_HOME=./.cargo cargo run'.
       start: zsc noop --silent

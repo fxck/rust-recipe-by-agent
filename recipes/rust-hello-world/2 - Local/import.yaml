@@ -2,21 +2,27 @@ project:
   name: rust-hello-world-local
 
 services:
-  # App container for testing the production build pipeline from a local machine.
-  # The developer runs the app locally (cargo run / cargo watch), uses 'zcli vpn up'
-  # to connect their machine to this Zerops project network, and accesses the 'db'
-  # service by its hostname as if running inside the project. Deploy to this container
-  # via 'zcli push' to validate the production build before promoting to a live environment.
+  # App service used during local development — runs the production build
+  # pipeline so local changes can be pushed and validated against the real
+  # infrastructure before deploying to staging or production.
   - hostname: app
     type: rust@stable
     zeropsSetup: prod
     buildFromGit: https://github.com/zerops-recipe-apps/rust-hello-world-app
     enableSubdomainAccess: true
+    minContainers: 1
+    maxContainers: 1
+    resources:
+      minRam: 0.125
+      minFreeRamGB: 0.05
 
   # Deploy PostgreSQL database for app data.
-  # Priority 10 ensures the database starts before the app container — without this,
-  # the app would fail with "connection refused" during deployment.
-  # This startup ordering pattern applies to all data services in this project.
+  # Priority 10 ensures the database starts before app containers, preventing
+  # connection errors during deployment.
+  # In local development the database is accessed via 'zcli vpn up', which
+  # creates a secure tunnel from your local machine into the Zerops network.
+  # The DB_HOST env variable on your local app should then point to 'db' (the
+  # service hostname) rather than localhost.
   - hostname: db
     type: postgresql@17
     mode: NON_HA

@@ -1,7 +1,7 @@
 # Rust Hello World Recipe
 
 <!-- #ZEROPS_EXTRACT_START:intro# -->
-Actix Web application with a health check endpoint that verifies PostgreSQL connectivity using `tokio-postgres` and returns JSON service status. Demonstrates the full Zerops build pipeline for Rust: compiling a release binary with `cargo build --release --locked`, deploying the minimal artifact to an Ubuntu runtime, and using `CARGO_HOME` to keep the Cargo registry inside the project directory for efficient caching.
+Actix-web application with a health check endpoint at `/` that tests live PostgreSQL connectivity — returning HTTP 200 with `{"type":"rust","status":{"database":"OK"}}` on success or HTTP 503 with an error detail if the database is unreachable. The release binary is ~6 MB with no runtime dependencies beyond the OS libc.
 <!-- #ZEROPS_EXTRACT_END:intro# -->
 
 **Full recipe page and deploy with one-click**

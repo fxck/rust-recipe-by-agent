@@ -1,2 +1,11 @@
-/target
-.cargo
+.DS_Store
+.env
+.idea
+
+# Rust build artifacts — compiled binary and incremental build cache
+target/
+
+# Custom Cargo home used during Zerops builds (CARGO_HOME=./.cargo).
+# Kept local to the repo so zerops.yaml can cache it between builds.
+# The registry sub-directory holds downloaded crate sources.
+.cargo/
